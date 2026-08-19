@@ -1,14 +1,14 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Sparkles, Wand2, AlertCircle } from "lucide-react";
+import { Sparkles, AlertCircle } from "lucide-react";
 import { Header } from "@/components/header";
 import { Uploader } from "@/components/uploader";
 import { ClassInput } from "@/components/class-input";
 import { OutputSelector } from "@/components/output-selector";
+import { SummaryPanel } from "@/components/summary-panel";
 import { Processing } from "@/components/processing";
 import { Results } from "@/components/results";
-import { Button } from "@/components/ui/button";
 import { processVideo, type JobResult, type Outputs } from "@/lib/api";
 
 type View = "config" | "processing" | "results";
@@ -16,11 +16,19 @@ type View = "config" | "processing" | "results";
 export default function Home() {
   const [view, setView] = useState<View>("config");
   const [file, setFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [classes, setClasses] = useState<string[]>(["person"]);
   const [outputs, setOutputs] = useState<Outputs>({ video: true, report: true, dataset: false });
   const [result, setResult] = useState<JobResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [credits, setCredits] = useState(100);
+
+  useEffect(() => {
+    if (!file) { setPreviewUrl(null); return; }
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
 
   const ready = !!file && classes.length > 0 && Object.values(outputs).some(Boolean);
 
@@ -50,11 +58,11 @@ export default function Home() {
     <div className="mesh-bg min-h-screen">
       <Header credits={credits} />
 
-      <main className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
+      <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
         {view === "config" && (
-          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
             {/* hero */}
-            <div className="text-center">
+            <div className="mx-auto max-w-2xl text-center">
               <div className="mx-auto mb-4 inline-flex items-center gap-2 rounded-full border border-border bg-card/50 px-3 py-1 text-xs text-muted-foreground">
                 <Sparkles className="h-3.5 w-3.5 text-accent" /> Open-vocabulary · no training required
               </div>
@@ -68,39 +76,49 @@ export default function Home() {
             </div>
 
             {error && (
-              <div className="flex items-center gap-2 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              <div className="mx-auto mt-6 flex max-w-2xl items-center gap-2 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
                 <AlertCircle className="h-4 w-4 shrink-0" /> {error}
               </div>
             )}
 
-            {/* steps */}
-            <section className="space-y-2">
-              <Step n={1} title="Upload a video" />
-              <Uploader file={file} onFile={setFile} />
-            </section>
+            {/* two-column workspace */}
+            <div className="mt-10 grid gap-8 lg:grid-cols-[1fr_360px]">
+              {/* left: steps */}
+              <div className="space-y-8">
+                <section className="space-y-3">
+                  <Step n={1} title="Upload a video" />
+                  <Uploader file={file} onFile={setFile} />
+                </section>
+                <section className="space-y-3">
+                  <Step n={2} title="What should we find?" />
+                  <ClassInput classes={classes} onChange={setClasses} />
+                </section>
+                <section className="space-y-3">
+                  <Step n={3} title="Choose your outputs" />
+                  <OutputSelector value={outputs} onChange={setOutputs} />
+                </section>
+              </div>
 
-            <section className="space-y-2">
-              <Step n={2} title="What should we find?" />
-              <ClassInput classes={classes} onChange={setClasses} />
-            </section>
-
-            <section className="space-y-2">
-              <Step n={3} title="Choose your outputs" />
-              <OutputSelector value={outputs} onChange={setOutputs} />
-            </section>
-
-            <Button size="lg" className="w-full" disabled={!ready} onClick={analyze}>
-              <Wand2 className="h-5 w-5" /> Analyze video
-            </Button>
-            <p className="text-center text-xs text-muted-foreground">
-              Runs on a cloud GPU · first run may take ~60s to warm up
-            </p>
+              {/* right: sticky preview + summary */}
+              <SummaryPanel
+                file={file}
+                previewUrl={previewUrl}
+                classes={classes}
+                outputs={outputs}
+                ready={ready}
+                onAnalyze={analyze}
+              />
+            </div>
           </motion.div>
         )}
 
         {view === "processing" && <Processing />}
 
-        {view === "results" && result && <Results result={result} onReset={reset} />}
+        {view === "results" && result && (
+          <div className="mx-auto max-w-4xl">
+            <Results result={result} onReset={reset} />
+          </div>
+        )}
       </main>
     </div>
   );
