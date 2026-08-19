@@ -1,0 +1,26 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+
+# ML weights / caches (large, downloaded at build time)
+*.pt
+*.onnx
+.cache/
+
+# Node / Next
+node_modules/
+.next/
+out/
+.env.local
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# temp outputs
+sightline_out/
