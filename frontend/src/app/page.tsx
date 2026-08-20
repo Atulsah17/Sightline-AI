@@ -1,15 +1,16 @@
 "use client";
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, AlertCircle, Wand2, RefreshCw, Radar, Route, FileBarChart } from "lucide-react";
+import { Sparkles, AlertCircle, Wand2, Radar, Route, FileBarChart } from "lucide-react";
 import { Header } from "@/components/header";
 import { Uploader } from "@/components/uploader";
 import { PromptInput } from "@/components/prompt-input";
 import { OutputToggles } from "@/components/output-toggles";
+import { RegionEditor } from "@/components/region-editor";
 import { Processing } from "@/components/processing";
 import { Results } from "@/components/results";
 import { Button } from "@/components/ui/button";
-import { processVideo, type JobResult, type Outputs } from "@/lib/api";
+import { processVideo, type JobResult, type Outputs, type Region } from "@/lib/api";
 
 type View = "config" | "processing" | "results";
 
@@ -19,6 +20,7 @@ export default function Home() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [prompt, setPrompt] = useState("");
   const [classes, setClasses] = useState<string[]>(["person"]);
+  const [regions, setRegions] = useState<Region[]>([]);
   const [outputs, setOutputs] = useState<Outputs>({ video: true, report: true, dataset: false });
   const [result, setResult] = useState<JobResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +40,7 @@ export default function Home() {
     setError(null);
     setView("processing");
     try {
-      const res = await processVideo(file, classes, outputs);
+      const res = await processVideo(file, classes, outputs, regions);
       setResult(res);
       setCredits((c) => Math.max(0, c - Math.ceil(res.stats.duration_s / 6)));
       setView("results");
@@ -52,6 +54,7 @@ export default function Home() {
     setFile(null);
     setResult(null);
     setError(null);
+    setRegions([]);
     setView("config");
   }
 
@@ -100,18 +103,14 @@ export default function Home() {
                 initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
                 className="grid gap-6 lg:grid-cols-[1.5fr_1fr]"
               >
-                {/* video hero */}
-                <div className="space-y-3">
-                  <div className="gradient-border overflow-hidden">
-                    <video src={previewUrl ?? undefined} muted loop autoPlay playsInline className="aspect-video w-full bg-black object-contain" />
-                  </div>
-                  <div className="flex items-center justify-between px-1 text-sm text-muted-foreground">
-                    <span className="truncate">{file.name}</span>
-                    <button onClick={() => setFile(null)} className="inline-flex items-center gap-1 hover:text-foreground">
-                      <RefreshCw className="h-3.5 w-3.5" /> Change
-                    </button>
-                  </div>
-                </div>
+                {/* video hero + region editor */}
+                <RegionEditor
+                  src={previewUrl}
+                  filename={file.name}
+                  regions={regions}
+                  onChange={setRegions}
+                  onChangeVideo={() => { setFile(null); setRegions([]); }}
+                />
 
                 {/* config card */}
                 <div className="gradient-border space-y-5 p-5">

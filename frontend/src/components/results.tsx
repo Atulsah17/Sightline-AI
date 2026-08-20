@@ -1,6 +1,6 @@
 "use client";
 import { motion } from "framer-motion";
-import { Download, Film, FileBarChart, Database, RotateCcw, Users, Target, Clock, Boxes } from "lucide-react";
+import { Download, Film, FileBarChart, Database, RotateCcw, Users, Target, Clock, Boxes, Minus, Hexagon, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { fileUrl, type JobResult } from "@/lib/api";
 
@@ -61,6 +61,36 @@ export function Results({ result, onReset }: { result: JobResult; onReset: () =>
           </motion.div>
         ))}
       </div>
+
+      {/* region counts (lines + zones) */}
+      {((stats.lines && stats.lines.length > 0) || (stats.zones && stats.zones.length > 0)) && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {stats.lines?.map((l) => (
+            <div key={l.name} className="gradient-border p-4">
+              <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
+                <Minus className="h-4 w-4 text-accent" /> {l.name}
+              </div>
+              <div className="flex items-center gap-4">
+                <div><p className="text-2xl font-bold tabular-nums text-accent">{l.in}</p><p className="text-xs text-muted-foreground">in</p></div>
+                <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                <div><p className="text-2xl font-bold tabular-nums">{l.out}</p><p className="text-xs text-muted-foreground">out</p></div>
+                <div className="ml-auto text-right"><p className="text-2xl font-bold tabular-nums">{l.total}</p><p className="text-xs text-muted-foreground">crossings</p></div>
+              </div>
+            </div>
+          ))}
+          {stats.zones?.map((z) => (
+            <div key={z.name} className="gradient-border p-4">
+              <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
+                <Hexagon className="h-4 w-4 text-primary" /> {z.name}
+              </div>
+              <div className="flex items-center gap-6">
+                <div><p className="text-2xl font-bold tabular-nums text-primary">{z.count}</p><p className="text-xs text-muted-foreground">objects entered</p></div>
+                <div><p className="text-2xl font-bold tabular-nums">{z.avg_dwell_s}s</p><p className="text-xs text-muted-foreground">avg dwell</p></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* per-class breakdown */}
       {Object.keys(stats.unique_objects).length > 0 && (

@@ -1,6 +1,13 @@
 export const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE ?? "https://atulsah17--sightline-web.modal.run";
 
+export type Region =
+  | { type: "line"; a: number[]; b: number[]; name?: string }
+  | { type: "zone"; points: number[][]; name?: string };
+
+export interface LineCount { name: string; in: number; out: number; total: number }
+export interface ZoneCount { name: string; count: number; avg_dwell_s: number }
+
 export interface JobStats {
   frames_processed: number;
   fps: number;
@@ -9,6 +16,8 @@ export interface JobStats {
   unique_objects: Record<string, number>;
   total_detections: number;
   detections_per_class: Record<string, number>;
+  lines?: LineCount[];
+  zones?: ZoneCount[];
 }
 
 export interface JobResult {
@@ -28,11 +37,13 @@ export async function processVideo(
   file: File,
   classes: string[],
   outputs: Outputs,
+  regions: Region[] = [],
   signal?: AbortSignal
 ): Promise<JobResult> {
   const fd = new FormData();
   fd.append("file", file);
   fd.append("classes", classes.join(","));
+  fd.append("regions", JSON.stringify(regions));
   fd.append("video", String(outputs.video));
   fd.append("report", String(outputs.report));
   fd.append("dataset", String(outputs.dataset));
