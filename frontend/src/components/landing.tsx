@@ -18,10 +18,11 @@ export function Landing({ onLaunch }: { onLaunch: () => void }) {
       <video
         src="/hero.mp4"
         autoPlay muted loop playsInline
-        className="absolute inset-0 h-full w-full object-cover opacity-60"
+        className="absolute inset-0 h-full w-full object-cover opacity-75"
       />
-      <div className="absolute inset-0 bg-gradient-to-b from-background/80 via-background/50 to-background" />
-      <div className="absolute inset-0 bg-[radial-gradient(60rem_40rem_at_50%_-10%,hsl(265_90%_66%/0.25),transparent_60%)]" />
+      <div className="absolute inset-0 bg-gradient-to-b from-background/55 via-background/25 to-background" />
+      <div className="absolute inset-0 bg-[radial-gradient(55rem_38rem_at_50%_40%,transparent,hsl(var(--background)/0.55)_75%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(60rem_40rem_at_50%_-10%,hsl(265_90%_66%/0.22),transparent_60%)]" />
 
       <div className="relative z-10 flex min-h-screen flex-col">
         {/* nav */}
