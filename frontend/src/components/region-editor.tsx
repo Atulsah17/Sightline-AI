@@ -1,20 +1,22 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { Minus, Hexagon, Trash2, Check, X, RefreshCw, ImageOff, Loader2 } from "lucide-react";
+import { Minus, Hexagon, Trash2, Check, X, RefreshCw, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { Region } from "@/lib/api";
+import { fetchThumbnail, type Region } from "@/lib/api";
 
 type Mode = null | "line" | "zone";
 type Preview = "loading" | "ready" | "unsupported";
 
 export function RegionEditor({
   src,
+  file,
   filename,
   regions,
   onChange,
   onChangeVideo,
 }: {
   src: string | null;
+  file: File | null;
   filename: string;
   regions: Region[];
   onChange: (r: Region[]) => void;
@@ -26,55 +28,67 @@ export function RegionEditor({
   const [poster, setPoster] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  // Grab a still frame from the video for a stable ROI backdrop. If the browser
-  // can't decode the codec (e.g. H.265/HEVC from CCTV), fall back to a grid.
+  // Grab a still frame for a stable ROI backdrop. Try the browser first; if it
+  // can't decode the codec (e.g. H.265/HEVC from CCTV), fetch a real frame from
+  // the server (ffmpeg) so users always draw on the actual footage.
   useEffect(() => {
     setPreview("loading");
     setPoster(null);
     if (!src) return;
+    let done = false;
+    let objUrl: string | null = null;
+
     const v = document.createElement("video");
     v.src = src;
     v.muted = true;
     v.playsInline = true;
-    v.crossOrigin = "anonymous";
-    let done = false;
+
+    const serverFallback = async () => {
+      if (done) return;
+      if (!file) { done = true; setPreview("unsupported"); return; }
+      const url = await fetchThumbnail(file);
+      if (done) return;
+      done = true;
+      if (url) { objUrl = url; setPoster(url); setPreview("ready"); }
+      else setPreview("unsupported");
+    };
 
     const grab = () => {
       if (done) return;
-      if (!v.videoWidth || !v.videoHeight) return; // codec not decodable
+      if (!v.videoWidth || !v.videoHeight) { serverFallback(); return; }
       done = true;
       try {
         const c = document.createElement("canvas");
         c.width = v.videoWidth;
         c.height = v.videoHeight;
         c.getContext("2d")!.drawImage(v, 0, 0, c.width, c.height);
-        setPoster(c.toDataURL("image/jpeg", 0.7));
+        setPoster(c.toDataURL("image/jpeg", 0.72));
         setPreview("ready");
       } catch {
-        setPreview("ready"); // frame decoded but tainted — still show live video
+        setPreview("ready"); // frame decoded but canvas tainted — live video still shows
       }
     };
 
     const onLoaded = () => {
-      // seek a little in so we don't grab a black lead-in frame
       try { v.currentTime = Math.min(0.5, (v.duration || 1) / 3); } catch { grab(); }
     };
-    const onError = () => { if (!done) { done = true; setPreview("unsupported"); } };
 
     v.addEventListener("loadeddata", onLoaded);
     v.addEventListener("seeked", grab);
-    v.addEventListener("error", onError);
-    // safety net: if nothing fires, treat as unsupported
-    const t = window.setTimeout(() => { if (!done) { done = true; setPreview("unsupported"); } }, 6000);
+    v.addEventListener("error", serverFallback);
+    // safety net: browser stalled on decode → go to server
+    const t = window.setTimeout(serverFallback, 4000);
 
     return () => {
+      done = true;
       window.clearTimeout(t);
       v.removeEventListener("loadeddata", onLoaded);
       v.removeEventListener("seeked", grab);
-      v.removeEventListener("error", onError);
+      v.removeEventListener("error", serverFallback);
       v.src = "";
+      if (objUrl) URL.revokeObjectURL(objUrl);
     };
-  }, [src]);
+  }, [src, file]);
 
   const lineN = regions.filter((r) => r.type === "line").length;
   const zoneN = regions.filter((r) => r.type === "zone").length;
@@ -125,14 +139,14 @@ export function RegionEditor({
           <video ref={videoRef} src={src} muted loop autoPlay playsInline className="absolute inset-0 h-full w-full object-contain" />
         )}
 
-        {/* loading */}
+        {/* loading (incl. server-side frame extraction for HEVC) */}
         {preview === "loading" && (
           <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground">
             <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading preview…
           </div>
         )}
 
-        {/* codec not decodable in-browser (e.g. H.265/HEVC) — draw on a grid */}
+        {/* both browser and server couldn't render a frame — draw on a grid */}
         {preview === "unsupported" && (
           <>
             <div
@@ -144,7 +158,7 @@ export function RegionEditor({
               }}
             />
             <div className="pointer-events-none absolute inset-x-0 top-3 mx-auto flex w-max items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-[11px] text-amber-300">
-              <ImageOff className="h-3.5 w-3.5" /> Preview unavailable for this codec — you can still draw regions
+              Preview unavailable — you can still draw regions
             </div>
           </>
         )}

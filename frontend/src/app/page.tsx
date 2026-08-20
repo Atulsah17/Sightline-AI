@@ -125,6 +125,7 @@ export default function Home() {
                 {/* video hero + region editor */}
                 <RegionEditor
                   src={previewUrl}
+                  file={file}
                   filename={file.name}
                   regions={regions}
                   onChange={setRegions}

@@ -85,6 +85,21 @@ export function fileUrl(jobId: string, name: string): string {
   return `${API_BASE}/api/files/${jobId}/${name}`;
 }
 
+/** Extract a real poster frame server-side (ffmpeg) — works for any codec incl. HEVC.
+ *  Returns an object URL for the JPEG, or null if extraction fails. */
+export async function fetchThumbnail(file: File, signal?: AbortSignal): Promise<string | null> {
+  const fd = new FormData();
+  fd.append("file", file);
+  try {
+    const r = await fetch(`${API_BASE}/api/thumbnail`, { method: "POST", body: fd, signal });
+    if (!r.ok) return null;
+    const blob = await r.blob();
+    return URL.createObjectURL(blob);
+  } catch {
+    return null;
+  }
+}
+
 /** Decode a natural-language prompt into detectable object keywords. */
 export async function parsePrompt(prompt: string): Promise<string[]> {
   const r = await fetch(`${API_BASE}/api/parse`, {

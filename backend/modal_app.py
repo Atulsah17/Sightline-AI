@@ -46,8 +46,10 @@ gpu_image = (
     .add_local_python_source("pipeline")   # local files must be added last
 )
 
-web_image = modal.Image.debian_slim(python_version="3.10").pip_install(
-    "fastapi[standard]", "python-multipart", "requests"
+web_image = (
+    modal.Image.debian_slim(python_version="3.10")
+    .apt_install("ffmpeg")  # extract a real poster frame for ROI drawing (handles HEVC)
+    .pip_install("fastapi[standard]", "python-multipart", "requests")
 )
 
 
@@ -162,6 +164,39 @@ def web():
         if not prompt.strip():
             raise HTTPException(400, "Empty prompt.")
         return {"classes": extract_classes(prompt)}
+
+    @api.post("/api/thumbnail")
+    async def thumbnail(file: UploadFile = File(...)):
+        """Extract one real frame as a JPEG so the client can show it as an ROI backdrop
+        even when the browser can't decode the video codec (e.g. H.265/HEVC)."""
+        import subprocess
+
+        from fastapi.responses import Response
+
+        data = await file.read()
+        if not data:
+            raise HTTPException(400, "Empty file.")
+        tmp = tempfile.mkdtemp()
+        src = os.path.join(tmp, "in")
+        out = os.path.join(tmp, "thumb.jpg")
+        with open(src, "wb") as f:
+            f.write(data)
+
+        def _extract(seek: bool) -> bool:
+            cmd = ["ffmpeg", "-y"]
+            if seek:
+                cmd += ["-ss", "1"]
+            cmd += ["-i", src, "-frames:v", "1", "-vf", "scale='min(960,iw)':-2", "-q:v", "4", out]
+            try:
+                subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                return os.path.isfile(out) and os.path.getsize(out) > 0
+            except Exception:
+                return False
+
+        if not _extract(seek=True) and not _extract(seek=False):
+            raise HTTPException(422, "Could not extract a frame.")
+        with open(out, "rb") as f:
+            return Response(content=f.read(), media_type="image/jpeg")
 
     @api.post("/api/process")
     async def process(
