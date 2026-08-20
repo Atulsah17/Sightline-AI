@@ -66,7 +66,19 @@ export async function processVideo(
     const detail = await res.json().catch(() => ({}));
     throw new Error(detail.detail ?? `Processing failed (${res.status})`);
   }
-  return res.json();
+  const { call_id } = await res.json();
+
+  // async job — poll until the GPU pipeline finishes
+  const deadline = Date.now() + 6 * 60 * 1000;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 3000));
+    const s = await fetch(`${API_BASE}/api/status/${call_id}`, { cache: "no-store", signal });
+    if (!s.ok) continue;
+    const j = await s.json();
+    if (j.status === "done") return j.result as JobResult;
+    if (j.status === "error") throw new Error(j.detail ?? "Processing failed. Please try again.");
+  }
+  throw new Error("This is taking too long — try a shorter clip.");
 }
 
 export function fileUrl(jobId: string, name: string): string {

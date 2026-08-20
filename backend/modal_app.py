@@ -90,13 +90,30 @@ vol = modal.Volume.from_name("sightline-outputs", create_if_missing=True)
 
 
 @app.function(image=gpu_image, gpu="T4", timeout=900, volumes={DATA_DIR: vol})
-def run_pipeline(job_id: str, video_bytes: bytes, classes: list, outputs: dict, regions: list, rules: list, safety: dict) -> dict:
+def run_pipeline(job_id: str, video_bytes: bytes, classes: list, outputs: dict, regions: list, rules: list, safety: dict, webhook: str = "") -> dict:
     import pipeline
+
+    import subprocess
 
     tmp = tempfile.mkdtemp()
     vpath = os.path.join(tmp, "input.mp4")
     with open(vpath, "wb") as f:
         f.write(video_bytes)
+
+    # Normalize: trim to first 60s + transcode to H.264 + cap width.
+    # Handles long clips (bounded GPU time) and any codec (e.g. HEVC) reliably.
+    MAX_SECONDS = 60
+    norm = os.path.join(tmp, "norm.mp4")
+    try:
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", vpath, "-t", str(MAX_SECONDS), "-an",
+             "-c:v", "libx264", "-preset", "veryfast", "-vf", "scale='min(1280,iw)':-2", norm],
+            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        if os.path.getsize(norm) > 0:
+            vpath = norm
+    except Exception as exc:
+        print(f"[normalize] ffmpeg failed, using original: {exc}")
 
     out_dir = os.path.join(DATA_DIR, job_id)
     stats = pipeline.process(vpath, classes, out_dir, outputs, regions=regions, rules=rules,
@@ -109,11 +126,21 @@ def run_pipeline(job_id: str, video_bytes: bytes, classes: list, outputs: dict, 
         shutil.rmtree(ds)
 
     files = sorted(f for f in os.listdir(out_dir) if os.path.isfile(os.path.join(out_dir, f)))
+    result = {"job_id": job_id, "stats": stats, "files": files}
+    # webhook with any triggered alerts (best-effort)
+    alerts = stats.get("alerts", [])
+    if webhook and alerts:
+        try:
+            import requests
+            requests.post(webhook, json={"job_id": job_id, "alerts": alerts}, timeout=10)
+        except Exception:
+            pass
     vol.commit()
-    return {"job_id": job_id, "stats": stats, "files": files}
+    return result
 
 
-@app.function(image=web_image, volumes={DATA_DIR: vol}, secrets=[modal.Secret.from_name("sightline-gemini")])
+@app.function(image=web_image, volumes={DATA_DIR: vol}, timeout=600,
+              secrets=[modal.Secret.from_name("sightline-gemini")])
 @modal.asgi_app()
 def web():
     from fastapi import Body, FastAPI, File, Form, HTTPException, UploadFile
@@ -172,17 +199,20 @@ def web():
             raise HTTPException(400, "Empty file.")
         job_id = uuid.uuid4().hex[:12]
         outputs = {"video": video, "report": report, "dataset": dataset}
-        result = run_pipeline.remote(job_id, video_bytes, cls, outputs, region_list, rule_list, safety_cfg)  # GPU
+        # spawn on GPU and return immediately; the client polls /api/status
+        call = run_pipeline.spawn(job_id, video_bytes, cls, outputs, region_list, rule_list, safety_cfg, webhook.strip())
+        return {"job_id": job_id, "call_id": call.object_id}
 
-        # fire webhook with any triggered alerts (best-effort)
-        alerts = result.get("stats", {}).get("alerts", [])
-        if webhook.strip() and alerts:
-            try:
-                import requests
-                requests.post(webhook.strip(), json={"job_id": job_id, "alerts": alerts}, timeout=10)
-            except Exception:
-                pass
-        return result
+    @api.get("/api/status/{call_id}")
+    def status(call_id: str):
+        fc = modal.FunctionCall.from_id(call_id)
+        try:
+            result = fc.get(timeout=0)
+        except TimeoutError:
+            return {"status": "running"}
+        except Exception as exc:
+            return {"status": "error", "detail": str(exc)[:200]}
+        return {"status": "done", "result": result}
 
     @api.get("/api/files/{job_id}/{name}")
     def download(job_id: str, name: str):
