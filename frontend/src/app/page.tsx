@@ -8,10 +8,11 @@ import { PromptInput } from "@/components/prompt-input";
 import { OutputToggles } from "@/components/output-toggles";
 import { RegionEditor } from "@/components/region-editor";
 import { RulesBuilder } from "@/components/rules-builder";
+import { SafetyToggle } from "@/components/safety-toggle";
 import { Processing } from "@/components/processing";
 import { Results } from "@/components/results";
 import { Button } from "@/components/ui/button";
-import { processVideo, type JobResult, type Outputs, type Region, type Rule } from "@/lib/api";
+import { processVideo, type JobResult, type Outputs, type Region, type Rule, type Safety } from "@/lib/api";
 
 type View = "config" | "processing" | "results";
 
@@ -23,6 +24,7 @@ export default function Home() {
   const [classes, setClasses] = useState<string[]>(["person"]);
   const [regions, setRegions] = useState<Region[]>([]);
   const [rules, setRules] = useState<Rule[]>([]);
+  const [safety, setSafety] = useState<Safety | null>(null);
   const [webhook, setWebhook] = useState("");
   const [outputs, setOutputs] = useState<Outputs>({ video: true, report: true, dataset: false });
   const [result, setResult] = useState<JobResult | null>(null);
@@ -43,7 +45,7 @@ export default function Home() {
     setError(null);
     setView("processing");
     try {
-      const res = await processVideo(file, classes, outputs, regions, rules, webhook);
+      const res = await processVideo(file, classes, outputs, regions, rules, safety, webhook);
       setResult(res);
       setCredits((c) => Math.max(0, c - Math.ceil(res.stats.duration_s / 6)));
       setView("results");
@@ -59,6 +61,7 @@ export default function Home() {
     setError(null);
     setRegions([]);
     setRules([]);
+    setSafety(null);
     setView("config");
   }
 
@@ -134,6 +137,8 @@ export default function Home() {
                     <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Outputs</label>
                     <OutputToggles value={outputs} onChange={setOutputs} />
                   </div>
+
+                  <SafetyToggle value={safety} onChange={setSafety} />
 
                   <RulesBuilder regions={regions} rules={rules} onChange={setRules} webhook={webhook} setWebhook={setWebhook} />
 

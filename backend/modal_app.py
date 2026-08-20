@@ -90,7 +90,7 @@ vol = modal.Volume.from_name("sightline-outputs", create_if_missing=True)
 
 
 @app.function(image=gpu_image, gpu="T4", timeout=900, volumes={DATA_DIR: vol})
-def run_pipeline(job_id: str, video_bytes: bytes, classes: list, outputs: dict, regions: list, rules: list) -> dict:
+def run_pipeline(job_id: str, video_bytes: bytes, classes: list, outputs: dict, regions: list, rules: list, safety: dict) -> dict:
     import pipeline
 
     tmp = tempfile.mkdtemp()
@@ -99,7 +99,8 @@ def run_pipeline(job_id: str, video_bytes: bytes, classes: list, outputs: dict, 
         f.write(video_bytes)
 
     out_dir = os.path.join(DATA_DIR, job_id)
-    stats = pipeline.process(vpath, classes, out_dir, outputs, regions=regions, rules=rules, model_weights=MODEL_PATH)
+    stats = pipeline.process(vpath, classes, out_dir, outputs, regions=regions, rules=rules,
+                             safety=(safety or None), model_weights=MODEL_PATH)
 
     # zip the dataset folder for a single-file download
     ds = os.path.join(out_dir, "dataset")
@@ -142,6 +143,7 @@ def web():
         prompt: str = Form(""),
         regions: str = Form(""),
         rules: str = Form(""),
+        safety: str = Form(""),
         webhook: str = Form(""),
         video: bool = Form(True),
         report: bool = Form(True),
@@ -162,12 +164,15 @@ def web():
                 return []
 
         region_list, rule_list = _loads(regions), _loads(rules)
+        safety_cfg = _loads(safety) if safety.strip() else {}
+        if isinstance(safety_cfg, list):
+            safety_cfg = {}
         video_bytes = await file.read()
         if not video_bytes:
             raise HTTPException(400, "Empty file.")
         job_id = uuid.uuid4().hex[:12]
         outputs = {"video": video, "report": report, "dataset": dataset}
-        result = run_pipeline.remote(job_id, video_bytes, cls, outputs, region_list, rule_list)  # GPU
+        result = run_pipeline.remote(job_id, video_bytes, cls, outputs, region_list, rule_list, safety_cfg)  # GPU
 
         # fire webhook with any triggered alerts (best-effort)
         alerts = result.get("stats", {}).get("alerts", [])

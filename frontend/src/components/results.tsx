@@ -1,6 +1,6 @@
 "use client";
 import { motion } from "framer-motion";
-import { Download, Film, FileBarChart, Database, RotateCcw, Users, Target, Clock, Boxes, Minus, Hexagon, ArrowRight, Bell } from "lucide-react";
+import { Download, Film, FileBarChart, Database, RotateCcw, Users, Target, Clock, Boxes, Minus, Hexagon, ArrowRight, Bell, HardHat, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { fileUrl, type JobResult } from "@/lib/api";
 
@@ -61,6 +61,27 @@ export function Results({ result, onReset }: { result: JobResult; onReset: () =>
           </motion.div>
         ))}
       </div>
+
+      {/* safety / PPE compliance */}
+      {stats.safety && (
+        <div className={`rounded-2xl border p-4 ${stats.safety.violations > 0 ? "border-amber-500/40 bg-amber-500/5" : "border-emerald-500/40 bg-emerald-500/5"}`}>
+          <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
+            {stats.safety.violations > 0
+              ? <><HardHat className="h-4 w-4 text-amber-400" /> <span className="text-amber-400">{stats.safety.violations} PPE violation{stats.safety.violations > 1 ? "s" : ""}</span></>
+              : <><ShieldCheck className="h-4 w-4 text-emerald-400" /> <span className="text-emerald-400">All clear — everyone wore the required {stats.safety.required.join(", ")}</span></>}
+          </div>
+          {stats.safety.violations > 0 && (
+            <div className="space-y-1.5">
+              {stats.safety.events.map((e, i) => (
+                <div key={i} className="flex items-center gap-2 text-sm">
+                  <span className="rounded-md bg-amber-500/15 px-1.5 py-0.5 font-mono text-xs text-amber-400">{fmtTime(e.time_s)}</span>
+                  <span className="flex-1">Person #{e.track_id} missing {stats.safety!.required.join(", ")}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* triggered alerts */}
       {stats.alerts && stats.alerts.length > 0 && (

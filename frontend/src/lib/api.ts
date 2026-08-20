@@ -10,6 +10,8 @@ export interface ZoneCount { name: string; count: number; avg_dwell_s: number }
 
 export interface Rule { name: string; metric: "screen" | "zone" | "line"; region?: string; threshold: number }
 export interface Alert { name: string; metric: string; region?: string; threshold: number; time_s: number; peak: number }
+export interface Safety { require: string[] }
+export interface SafetyResult { required: string[]; violations: number; events: { track_id: number; time_s: number }[] }
 
 export interface JobStats {
   frames_processed: number;
@@ -22,6 +24,7 @@ export interface JobStats {
   lines?: LineCount[];
   zones?: ZoneCount[];
   alerts?: Alert[];
+  safety?: SafetyResult;
 }
 
 export interface JobResult {
@@ -43,6 +46,7 @@ export async function processVideo(
   outputs: Outputs,
   regions: Region[] = [],
   rules: Rule[] = [],
+  safety: Safety | null = null,
   webhook: string = "",
   signal?: AbortSignal
 ): Promise<JobResult> {
@@ -51,6 +55,7 @@ export async function processVideo(
   fd.append("classes", classes.join(","));
   fd.append("regions", JSON.stringify(regions));
   fd.append("rules", JSON.stringify(rules));
+  fd.append("safety", safety ? JSON.stringify(safety) : "");
   fd.append("webhook", webhook);
   fd.append("video", String(outputs.video));
   fd.append("report", String(outputs.report));
