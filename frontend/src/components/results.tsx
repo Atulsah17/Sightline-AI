@@ -1,6 +1,6 @@
 "use client";
 import { motion } from "framer-motion";
-import { Download, Film, FileBarChart, Database, RotateCcw, Users, Target, Clock, Boxes, Minus, Hexagon, ArrowRight } from "lucide-react";
+import { Download, Film, FileBarChart, Database, RotateCcw, Users, Target, Clock, Boxes, Minus, Hexagon, ArrowRight, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { fileUrl, type JobResult } from "@/lib/api";
 
@@ -61,6 +61,24 @@ export function Results({ result, onReset }: { result: JobResult; onReset: () =>
           </motion.div>
         ))}
       </div>
+
+      {/* triggered alerts */}
+      {stats.alerts && stats.alerts.length > 0 && (
+        <div className="rounded-2xl border border-accent/40 bg-accent/5 p-4">
+          <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-accent">
+            <Bell className="h-4 w-4" /> {stats.alerts.length} alert{stats.alerts.length > 1 ? "s" : ""} triggered
+          </div>
+          <div className="space-y-1.5">
+            {stats.alerts.map((a, i) => (
+              <div key={i} className="flex items-center gap-2 text-sm">
+                <span className="rounded-md bg-accent/15 px-1.5 py-0.5 font-mono text-xs text-accent">{fmtTime(a.time_s)}</span>
+                <span className="flex-1">{a.name}</span>
+                <span className="text-xs text-muted-foreground">peak {a.peak}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* region counts (lines + zones) */}
       {((stats.lines && stats.lines.length > 0) || (stats.zones && stats.zones.length > 0)) && (
@@ -126,6 +144,12 @@ export function Results({ result, onReset }: { result: JobResult; onReset: () =>
       </div>
     </motion.div>
   );
+}
+
+function fmtTime(s: number): string {
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
 function DownloadCard({ icon: Icon, label, url }: { icon: typeof Film; label: string; url: string }) {

@@ -8,6 +8,9 @@ export type Region =
 export interface LineCount { name: string; in: number; out: number; total: number }
 export interface ZoneCount { name: string; count: number; avg_dwell_s: number }
 
+export interface Rule { name: string; metric: "screen" | "zone" | "line"; region?: string; threshold: number }
+export interface Alert { name: string; metric: string; region?: string; threshold: number; time_s: number; peak: number }
+
 export interface JobStats {
   frames_processed: number;
   fps: number;
@@ -18,6 +21,7 @@ export interface JobStats {
   detections_per_class: Record<string, number>;
   lines?: LineCount[];
   zones?: ZoneCount[];
+  alerts?: Alert[];
 }
 
 export interface JobResult {
@@ -38,12 +42,16 @@ export async function processVideo(
   classes: string[],
   outputs: Outputs,
   regions: Region[] = [],
+  rules: Rule[] = [],
+  webhook: string = "",
   signal?: AbortSignal
 ): Promise<JobResult> {
   const fd = new FormData();
   fd.append("file", file);
   fd.append("classes", classes.join(","));
   fd.append("regions", JSON.stringify(regions));
+  fd.append("rules", JSON.stringify(rules));
+  fd.append("webhook", webhook);
   fd.append("video", String(outputs.video));
   fd.append("report", String(outputs.report));
   fd.append("dataset", String(outputs.dataset));

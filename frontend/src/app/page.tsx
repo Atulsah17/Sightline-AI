@@ -7,10 +7,11 @@ import { Uploader } from "@/components/uploader";
 import { PromptInput } from "@/components/prompt-input";
 import { OutputToggles } from "@/components/output-toggles";
 import { RegionEditor } from "@/components/region-editor";
+import { RulesBuilder } from "@/components/rules-builder";
 import { Processing } from "@/components/processing";
 import { Results } from "@/components/results";
 import { Button } from "@/components/ui/button";
-import { processVideo, type JobResult, type Outputs, type Region } from "@/lib/api";
+import { processVideo, type JobResult, type Outputs, type Region, type Rule } from "@/lib/api";
 
 type View = "config" | "processing" | "results";
 
@@ -21,6 +22,8 @@ export default function Home() {
   const [prompt, setPrompt] = useState("");
   const [classes, setClasses] = useState<string[]>(["person"]);
   const [regions, setRegions] = useState<Region[]>([]);
+  const [rules, setRules] = useState<Rule[]>([]);
+  const [webhook, setWebhook] = useState("");
   const [outputs, setOutputs] = useState<Outputs>({ video: true, report: true, dataset: false });
   const [result, setResult] = useState<JobResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +43,7 @@ export default function Home() {
     setError(null);
     setView("processing");
     try {
-      const res = await processVideo(file, classes, outputs, regions);
+      const res = await processVideo(file, classes, outputs, regions, rules, webhook);
       setResult(res);
       setCredits((c) => Math.max(0, c - Math.ceil(res.stats.duration_s / 6)));
       setView("results");
@@ -55,6 +58,7 @@ export default function Home() {
     setResult(null);
     setError(null);
     setRegions([]);
+    setRules([]);
     setView("config");
   }
 
@@ -130,6 +134,8 @@ export default function Home() {
                     <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Outputs</label>
                     <OutputToggles value={outputs} onChange={setOutputs} />
                   </div>
+
+                  <RulesBuilder regions={regions} rules={rules} onChange={setRules} webhook={webhook} setWebhook={setWebhook} />
 
                   <Button className="w-full" size="lg" disabled={!ready} onClick={analyze}>
                     <Wand2 className="h-5 w-5" /> Analyze video

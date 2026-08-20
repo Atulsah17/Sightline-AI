@@ -90,7 +90,7 @@ vol = modal.Volume.from_name("sightline-outputs", create_if_missing=True)
 
 
 @app.function(image=gpu_image, gpu="T4", timeout=900, volumes={DATA_DIR: vol})
-def run_pipeline(job_id: str, video_bytes: bytes, classes: list, outputs: dict, regions: list) -> dict:
+def run_pipeline(job_id: str, video_bytes: bytes, classes: list, outputs: dict, regions: list, rules: list) -> dict:
     import pipeline
 
     tmp = tempfile.mkdtemp()
@@ -99,7 +99,7 @@ def run_pipeline(job_id: str, video_bytes: bytes, classes: list, outputs: dict, 
         f.write(video_bytes)
 
     out_dir = os.path.join(DATA_DIR, job_id)
-    stats = pipeline.process(vpath, classes, out_dir, outputs, regions=regions, model_weights=MODEL_PATH)
+    stats = pipeline.process(vpath, classes, out_dir, outputs, regions=regions, rules=rules, model_weights=MODEL_PATH)
 
     # zip the dataset folder for a single-file download
     ds = os.path.join(out_dir, "dataset")
@@ -141,6 +141,8 @@ def web():
         classes: str = Form(""),
         prompt: str = Form(""),
         regions: str = Form(""),
+        rules: str = Form(""),
+        webhook: str = Form(""),
         video: bool = Form(True),
         report: bool = Form(True),
         dataset: bool = Form(False),
@@ -152,16 +154,29 @@ def web():
             cls = extract_classes(prompt)
         if not cls:
             raise HTTPException(400, "Provide classes or a prompt.")
-        try:
-            region_list = _json.loads(regions) if regions.strip() else []
-        except Exception:
-            region_list = []
+
+        def _loads(s):
+            try:
+                return _json.loads(s) if s.strip() else []
+            except Exception:
+                return []
+
+        region_list, rule_list = _loads(regions), _loads(rules)
         video_bytes = await file.read()
         if not video_bytes:
             raise HTTPException(400, "Empty file.")
         job_id = uuid.uuid4().hex[:12]
         outputs = {"video": video, "report": report, "dataset": dataset}
-        result = run_pipeline.remote(job_id, video_bytes, cls, outputs, region_list)  # runs on GPU
+        result = run_pipeline.remote(job_id, video_bytes, cls, outputs, region_list, rule_list)  # GPU
+
+        # fire webhook with any triggered alerts (best-effort)
+        alerts = result.get("stats", {}).get("alerts", [])
+        if webhook.strip() and alerts:
+            try:
+                import requests
+                requests.post(webhook.strip(), json={"job_id": job_id, "alerts": alerts}, timeout=10)
+            except Exception:
+                pass
         return result
 
     @api.get("/api/files/{job_id}/{name}")
