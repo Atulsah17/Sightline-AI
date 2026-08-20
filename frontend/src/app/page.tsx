@@ -6,6 +6,7 @@ import { Header } from "@/components/header";
 import { Uploader } from "@/components/uploader";
 import { PromptInput } from "@/components/prompt-input";
 import { OutputToggles } from "@/components/output-toggles";
+import { EyeIntro } from "@/components/eye-intro";
 import { Landing } from "@/components/landing";
 import { RegionEditor } from "@/components/region-editor";
 import { RulesBuilder } from "@/components/rules-builder";
@@ -18,6 +19,7 @@ import { processVideo, type JobResult, type Outputs, type Region, type Rule, typ
 type View = "config" | "processing" | "results";
 
 export default function Home() {
+  const [introDone, setIntroDone] = useState(false);
   const [launched, setLaunched] = useState(false);
   const [view, setView] = useState<View>("config");
   const [file, setFile] = useState<File | null>(null);
@@ -65,6 +67,10 @@ export default function Home() {
     setRules([]);
     setSafety(null);
     setView("config");
+  }
+
+  if (!introDone) {
+    return <EyeIntro onDone={() => setIntroDone(true)} />;
   }
 
   if (!launched) {
