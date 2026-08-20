@@ -1,10 +1,11 @@
 "use client";
-import { useState } from "react";
-import { Minus, Hexagon, Trash2, Check, X, RefreshCw } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Minus, Hexagon, Trash2, Check, X, RefreshCw, ImageOff, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Region } from "@/lib/api";
 
 type Mode = null | "line" | "zone";
+type Preview = "loading" | "ready" | "unsupported";
 
 export function RegionEditor({
   src,
@@ -21,6 +22,59 @@ export function RegionEditor({
 }) {
   const [mode, setMode] = useState<Mode>(null);
   const [draft, setDraft] = useState<number[][]>([]);
+  const [preview, setPreview] = useState<Preview>("loading");
+  const [poster, setPoster] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  // Grab a still frame from the video for a stable ROI backdrop. If the browser
+  // can't decode the codec (e.g. H.265/HEVC from CCTV), fall back to a grid.
+  useEffect(() => {
+    setPreview("loading");
+    setPoster(null);
+    if (!src) return;
+    const v = document.createElement("video");
+    v.src = src;
+    v.muted = true;
+    v.playsInline = true;
+    v.crossOrigin = "anonymous";
+    let done = false;
+
+    const grab = () => {
+      if (done) return;
+      if (!v.videoWidth || !v.videoHeight) return; // codec not decodable
+      done = true;
+      try {
+        const c = document.createElement("canvas");
+        c.width = v.videoWidth;
+        c.height = v.videoHeight;
+        c.getContext("2d")!.drawImage(v, 0, 0, c.width, c.height);
+        setPoster(c.toDataURL("image/jpeg", 0.7));
+        setPreview("ready");
+      } catch {
+        setPreview("ready"); // frame decoded but tainted — still show live video
+      }
+    };
+
+    const onLoaded = () => {
+      // seek a little in so we don't grab a black lead-in frame
+      try { v.currentTime = Math.min(0.5, (v.duration || 1) / 3); } catch { grab(); }
+    };
+    const onError = () => { if (!done) { done = true; setPreview("unsupported"); } };
+
+    v.addEventListener("loadeddata", onLoaded);
+    v.addEventListener("seeked", grab);
+    v.addEventListener("error", onError);
+    // safety net: if nothing fires, treat as unsupported
+    const t = window.setTimeout(() => { if (!done) { done = true; setPreview("unsupported"); } }, 6000);
+
+    return () => {
+      window.clearTimeout(t);
+      v.removeEventListener("loadeddata", onLoaded);
+      v.removeEventListener("seeked", grab);
+      v.removeEventListener("error", onError);
+      v.src = "";
+    };
+  }, [src]);
 
   const lineN = regions.filter((r) => r.type === "line").length;
   const zoneN = regions.filter((r) => r.type === "zone").length;
@@ -60,8 +114,41 @@ export function RegionEditor({
 
   return (
     <div className="space-y-3">
-      <div className="gradient-border relative overflow-hidden">
-        {src && <video src={src} muted loop autoPlay playsInline className="aspect-video w-full bg-black object-contain" />}
+      <div className="gradient-border relative aspect-video w-full overflow-hidden bg-black">
+        {/* poster frame when we could decode one */}
+        {poster && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={poster} alt="video frame" className="absolute inset-0 h-full w-full object-contain" />
+        )}
+        {/* live video only while we have no poster yet and the codec is fine */}
+        {src && !poster && preview !== "unsupported" && (
+          <video ref={videoRef} src={src} muted loop autoPlay playsInline className="absolute inset-0 h-full w-full object-contain" />
+        )}
+
+        {/* loading */}
+        {preview === "loading" && (
+          <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground">
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading preview…
+          </div>
+        )}
+
+        {/* codec not decodable in-browser (e.g. H.265/HEVC) — draw on a grid */}
+        {preview === "unsupported" && (
+          <>
+            <div
+              className="absolute inset-0 opacity-40"
+              style={{
+                backgroundImage:
+                  "linear-gradient(rgba(255,255,255,.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.08) 1px, transparent 1px)",
+                backgroundSize: "40px 40px",
+              }}
+            />
+            <div className="pointer-events-none absolute inset-x-0 top-3 mx-auto flex w-max items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-[11px] text-amber-300">
+              <ImageOff className="h-3.5 w-3.5" /> Preview unavailable for this codec — you can still draw regions
+            </div>
+          </>
+        )}
+
         <svg
           viewBox="0 0 1 1"
           preserveAspectRatio="none"
