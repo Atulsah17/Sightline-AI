@@ -48,3 +48,14 @@ export async function processVideo(
 export function fileUrl(jobId: string, name: string): string {
   return `${API_BASE}/api/files/${jobId}/${name}`;
 }
+
+/** Decode a natural-language prompt into detectable object keywords. */
+export async function parsePrompt(prompt: string): Promise<string[]> {
+  const r = await fetch(`${API_BASE}/api/parse`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt }),
+  });
+  if (!r.ok) return [];
+  return (await r.json()).classes ?? [];
+}

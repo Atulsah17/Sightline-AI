@@ -47,8 +47,44 @@ gpu_image = (
 )
 
 web_image = modal.Image.debian_slim(python_version="3.10").pip_install(
-    "fastapi[standard]", "python-multipart"
+    "fastapi[standard]", "python-multipart", "requests"
 )
+
+
+def extract_classes(prompt: str) -> list[str]:
+    """Use Gemini to turn a natural-language request into detectable object labels."""
+    import json
+    import os
+    import re
+
+    import requests
+
+    fallback = [w for w in re.findall(r"[a-zA-Z][a-zA-Z-]+", prompt.lower()) if len(w) > 2][:6]
+    key = os.environ.get("GEMINI_API_KEY", "")
+    if not key:
+        return fallback
+    body = {
+        "model": "gemini-3.1-flash-lite",
+        "temperature": 0,
+        "messages": [{"role": "user", "content": (
+            "From the request below, extract the physical, visually-detectable object types to look "
+            "for in a video. Return ONLY a JSON array of short lowercase labels (1-2 words each), at "
+            f"most 6, suitable for an object detector.\n\nRequest: {prompt}"
+        )}],
+    }
+    try:
+        r = requests.post(
+            "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+            headers={"Authorization": f"Bearer {key}"}, json=body, timeout=30,
+        )
+        r.raise_for_status()
+        content = r.json()["choices"][0]["message"]["content"]
+        m = re.search(r"\[.*\]", content, re.DOTALL)
+        arr = json.loads(m.group(0)) if m else []
+        cleaned = [str(x).strip().lower() for x in arr if str(x).strip()][:6]
+        return cleaned or fallback
+    except Exception:
+        return fallback
 
 vol = modal.Volume.from_name("sightline-outputs", create_if_missing=True)
 
@@ -76,10 +112,10 @@ def run_pipeline(job_id: str, video_bytes: bytes, classes: list, outputs: dict) 
     return {"job_id": job_id, "stats": stats, "files": files}
 
 
-@app.function(image=web_image, volumes={DATA_DIR: vol})
+@app.function(image=web_image, volumes={DATA_DIR: vol}, secrets=[modal.Secret.from_name("sightline-gemini")])
 @modal.asgi_app()
 def web():
-    from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+    from fastapi import Body, FastAPI, File, Form, HTTPException, UploadFile
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import FileResponse
 
@@ -92,17 +128,27 @@ def web():
     def health():
         return {"status": "ok", "service": "sightline"}
 
+    @api.post("/api/parse")
+    def parse(prompt: str = Body(..., embed=True)):
+        """Turn a natural-language request into detectable object keywords."""
+        if not prompt.strip():
+            raise HTTPException(400, "Empty prompt.")
+        return {"classes": extract_classes(prompt)}
+
     @api.post("/api/process")
     async def process(
         file: UploadFile = File(...),
-        classes: str = Form(...),
+        classes: str = Form(""),
+        prompt: str = Form(""),
         video: bool = Form(True),
         report: bool = Form(True),
         dataset: bool = Form(False),
     ):
         cls = [c.strip() for c in classes.split(",") if c.strip()]
+        if not cls and prompt.strip():
+            cls = extract_classes(prompt)
         if not cls:
-            raise HTTPException(400, "Provide at least one class.")
+            raise HTTPException(400, "Provide classes or a prompt.")
         video_bytes = await file.read()
         if not video_bytes:
             raise HTTPException(400, "Empty file.")

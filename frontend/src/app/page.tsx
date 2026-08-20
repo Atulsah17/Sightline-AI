@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, AlertCircle, Wand2, RefreshCw, Radar, Route, FileBarChart } from "lucide-react";
 import { Header } from "@/components/header";
 import { Uploader } from "@/components/uploader";
-import { ClassInput } from "@/components/class-input";
+import { PromptInput } from "@/components/prompt-input";
 import { OutputToggles } from "@/components/output-toggles";
 import { Processing } from "@/components/processing";
 import { Results } from "@/components/results";
@@ -17,6 +17,7 @@ export default function Home() {
   const [view, setView] = useState<View>("config");
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [prompt, setPrompt] = useState("");
   const [classes, setClasses] = useState<string[]>(["person"]);
   const [outputs, setOutputs] = useState<Outputs>({ video: true, report: true, dataset: false });
   const [result, setResult] = useState<JobResult | null>(null);
@@ -122,8 +123,8 @@ export default function Home() {
                   {error && <ErrorBar msg={error} />}
 
                   <div className="space-y-2">
-                    <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">What to detect</label>
-                    <ClassInput classes={classes} onChange={setClasses} />
+                    <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">What to find</label>
+                    <PromptInput prompt={prompt} setPrompt={setPrompt} classes={classes} setClasses={setClasses} />
                   </div>
 
                   <div className="space-y-2">
